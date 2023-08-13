@@ -5,13 +5,13 @@ class API {
 
     static $url = 'https://api.swiss-bitcoin-pay.ch';
 
-    public static function create_charge($amount, $memo, $order_id, $redirect_after_paid, $is_on_chain, $api_key) {
+    public static function create_charge($amount, $currency, $memo, $order_id, $redirect_after_paid, $is_on_chain, $api_key) {
         $order = wc_get_order($order_id);
         $data = array(
             "title" => $memo,   
             "webhook" => sprintf("%s/wp-json/sbp_gw/v1/payment_complete/%s", get_site_url(), $order_id),
             "amount"=> $amount,
-            "unit" => "sat",
+            "unit" => $currency,
             "redirectAfterPaid" => $redirect_after_paid,
             "onChain" => $is_on_chain
         );
@@ -30,6 +30,16 @@ class API {
         $response = CurlWrapper::get(API::$url.'/checkout/'.$payment_id, array(), $headers);
 
         return true == $response['response']['isPaid'];
+    }
+
+    public static function get_transaction_limit($currency) {
+        $headers = array(
+            'Content-Type' => 'application/json'
+        );
+
+        $response = CurlWrapper::get(API::$url.'/transaction-limit/'.strtoupper($currency), array(), $headers);
+
+        return $response['response'];
     }
 
 }

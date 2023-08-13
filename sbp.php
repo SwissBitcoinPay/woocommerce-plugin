@@ -15,7 +15,6 @@ add_action('plugins_loaded', 'sbp_gateway_init');
 
 require_once(__DIR__ . '/includes/init.php');
 
-use SwissBitcoinPayPlugin\Utils;
 use SwissBitcoinPayPlugin\API;
 
 // This is the entry point of the plugin, where everything is registered/hooked up into WordPress.
@@ -165,22 +164,18 @@ function sbp_gateway_init()
             $memo = get_bloginfo('name') . " Order #" . $order->get_id() . " Total=" . $order->get_total() . get_woocommerce_currency();
 
             //We do not proceed payments above 1000CHF
-            $amount_in_chf = Utils::convert_to_chf($order->get_total(), get_woocommerce_currency());
-            if($amount_in_chf > 1000) {
-                $message = __("Unauthorized amount (>1000CHF). Actual is ", 'sbp_payment_gateway').$amount_in_chf."CHF.";
-
-                return array(
-                    "result"   => "failure",
-                    "messages" => array($message)
-                );
+            $transaction_limit = API::get_transaction_limit(get_woocommerce_currency());
+            if($order->get_total() > $transaction_limit) {
+                $error_message = __("Unauthorized amount (>1000CHF). Actual is ", 'sbp_payment_gateway').$order->get_total().get_woocommerce_currency().".";
+                wc_add_notice($error_message, 'error' );
+                return;
             }
             
-            $amount = Utils::convert_to_satoshis($order->get_total(), get_woocommerce_currency());
             $is_on_chain = $this->get_option('sbp_is_on_chain') == 'yes' ? true : false;
 
             // Call Swiss Bitcoin Pay server to create invoice
-            $r = API::create_charge($amount, $memo, $order_id, $order->get_checkout_order_received_url(),
-                                        $is_on_chain, $this->get_option('sbp_api_key'));
+            $r = API::create_charge($order->get_total(), get_woocommerce_currency(), $memo, $order_id, 
+                                        $order->get_checkout_order_received_url(), $is_on_chain, $this->get_option('sbp_api_key'));
 
             if ($r['status'] === 201) {
                 $response_body = $r['response'];

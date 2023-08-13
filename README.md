@@ -11,7 +11,7 @@ Follow the instructions below to install and configure the plugin.
 ## Accept Bitcoin payment on WooCommerce through Swiss Bitcoin Pay payment gateway.
 
 ### Install Swiss Bitcoin Pay payment gateway plugin
-1. Install the plugin using your Wordpress admin panel by searching for "Swiss Bitcoin Pay Payment Gateway" or drop this repo into your wp-content/plugins directory
+1. Install the plugin using your Wordpress admin panel by searching for "Swiss Bitcoin Pay Payment Gateway" or drop this repo into your `wp-content/plugins` directory
 
 ### Swiss Bitcoin Pay payment gateway configuration
 1. From your WordPress dashboard, go to _WooCommerce -> Settings -> Payments_ and activate the Swiss Bitcoin Pay payment method, then click _manage_.
@@ -25,5 +25,3 @@ This plugin is released under the [MIT license](https://github.com/SwissBitcoinP
 This plugin is based on the [LNBits WooCommerce plugin](https://github.com/lnbits/woocommerce-payment-gateway) which was already a fork of Phaedrus' original [LNBits For WooCommerce](https://gitlab.com/sovereign-individuals/lnbits-for-woocommerce).
 
 Thanks to Phaedrus and LNBits for the work done.
-
-Thanks to fawazahmed0 for providing this currency api : [Currency API](https://github.com/fawazahmed0/currency-api).
