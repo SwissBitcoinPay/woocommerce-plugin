@@ -62,7 +62,8 @@ function sbp_gateway_init()
     add_action("rest_api_init", function () {
         register_rest_route("sbp_gw/v1", "/payment_complete/(?P<id>\d+)", array(
             "methods"  => WP_REST_Server::EDITABLE,
-            "callback" => "sbp_add_payment_complete_callback"
+            "callback" => "sbp_add_payment_complete_callback",
+            'permission_callback' => '__return_true'
         ));
     });
 
