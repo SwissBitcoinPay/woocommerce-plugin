@@ -6,7 +6,7 @@ Plugin URI: https://github.com/SwissBitcoinPay/woocommerce-plugin
 Description: Accept Bitcoin in a few minutes
 Text Domain: sbp_payment_gateway
 Domain Path: /languages
-Version: 0.0.1
+Version: 0.0.2
 Author: Thomas Ballivet
 Author URI: https://github.com/thomask7b
 */  
