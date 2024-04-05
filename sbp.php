@@ -6,14 +6,14 @@ Plugin URI: https://github.com/SwissBitcoinPay/woocommerce-plugin
 Description: Accept Bitcoin in a few minutes
 Text Domain: sbp_payment_gateway
 Domain Path: /languages
-Version: 0.0.2
+Version: 0.0.3
 Author: Thomas Ballivet
 Author URI: https://github.com/thomask7b
 */  
 
 add_action('plugins_loaded', 'sbp_gateway_init');
 
-require_once(__DIR__ . '/includes/init.php');
+require_once(__DIR__ . '/init.php');
 
 use SwissBitcoinPayPlugin\API;
 
@@ -32,40 +32,6 @@ function sbp_gateway_init()
     }
 
     add_filter('woocommerce_payment_gateways', 'add_sbp_gateway');
-
-    //Webhook called by Swiss Bitcoin Pay API
-    function sbp_add_payment_complete_callback($data)
-    {
-        if (empty($data["id"])) {
-            error_log("sbp_add_payment_complete_callback should not be called without id param");
-            return;
-        }
-
-        $order = wc_get_order($data["id"]);
-
-        if(!API::is_charge_paid($order->get_meta('sbp_payment_id'))) {
-            error_log("sbp_add_payment_complete_callback should not be called if payment is not already done");
-            return;
-        }
-
-        $order->add_order_note(__('Payment done. Purchased goods/services can be securely delivered to the customer.', 'sbp_payment_gateway'));
-        $order->payment_complete();
-        $order->save();
-
-        echo(json_encode(array(
-            'result'   => 'success',
-            'redirect' => $order->get_checkout_order_received_url()
-        )));
-    }
-
-    //Register callback
-    add_action("rest_api_init", function () {
-        register_rest_route("sbp_gw/v1", "/payment_complete/(?P<id>\d+)", array(
-            "methods"  => WP_REST_Server::EDITABLE,
-            "callback" => "sbp_add_payment_complete_callback",
-            'permission_callback' => '__return_true'
-        ));
-    });
 
 
     // Defined here, because it needs to be defined after WC_Payment_Gateway is already loaded.
@@ -120,6 +86,11 @@ function sbp_gateway_init()
                     'type'        => 'text',
                     'description' => __('Available from your Swiss Bitcoin Pay dashboard', 'sbp_payment_gateway'),
                 ),
+                'sbp_secret_key'       => array(
+                    'title'       => __('Swiss Bitcoin Pay Secret key (HMAC)', 'sbp_payment_gateway'),
+                    'type'        => 'password',
+                    'description' => __('Available from your Swiss Bitcoin Pay dashboard', 'sbp_payment_gateway'),
+                ),
                 'title'                               => array(
                     'title'       => __('Title', 'sbp_payment_gateway'),
                     'type'        => 'text',
@@ -137,7 +108,7 @@ function sbp_gateway_init()
                     'label'       => __('Enable on chain payments for customers', 'sbp_payment_gateway'),
                     'type'        => 'checkbox',
                     'description' => '',
-                    'default'     => 'no',
+                    'default'     => 'yes',
                 ),
             );
         }
@@ -148,6 +119,21 @@ function sbp_gateway_init()
         {
             if ($description = $this->get_description()) {
                 echo esc_html(wpautop(wptexturize($description)));
+            }
+        }
+
+
+        /**
+         * Register WooCommerce Blocks support.
+         */
+        public static function blocksSupport() {
+            if ( class_exists( '\Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
+                add_action(
+                    'woocommerce_blocks_payment_method_type_registration',
+                    function( \Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $payment_method_registry ) {
+                        $payment_method_registry->register(new \SwissBitcoinPay\WC\Blocks\DefaultGatewayBlocks());
+                    }
+                );
             }
         }
 
@@ -164,13 +150,6 @@ function sbp_gateway_init()
             // This will be stored in the invoice
             $memo = get_bloginfo('name') . " Order #" . $order->get_id() . " Total=" . $order->get_total() . get_woocommerce_currency();
 
-            //We do not proceed payments above 1000CHF
-            $transaction_limit = API::get_transaction_limit(get_woocommerce_currency());
-            if($order->get_total() > $transaction_limit) {
-                $error_message = __("Unauthorized amount (>1000CHF). Actual is ", 'sbp_payment_gateway').$order->get_total().get_woocommerce_currency().".";
-                wc_add_notice($error_message, 'error' );
-                return;
-            }
             
             $is_on_chain = $this->get_option('sbp_is_on_chain') == 'yes' ? true : false;
 
@@ -201,4 +180,78 @@ function sbp_gateway_init()
 
     }
 
+    
+    //Webhook called by Swiss Bitcoin Pay API
+    function sbp_add_payment_complete_callback($data) {
+        $headers = $data->get_headers();
+        $body = $data->get_params();
+        
+        $sbp_sig = $headers["sbp_sig"][0];
+        $signature = explode("=", $sbp_sig)[1];
+
+        if (empty($data["wcOrderId"])) {
+            error_log("sbp_add_payment_complete_callback should not be called without id param");
+            return;
+        }
+
+        $order = wc_get_order($data["wcOrderId"]);
+
+        if (!check_signature($data->get_body(), $signature, $order->get_meta('sbp_payment_id'))) {
+            error_log("[Swiss Bitcoin Pay Plugin] Wrong HMAC signature key!");
+            echo(json_encode(array(
+                'result'   => 'error',
+                'reason'   => 'Wrong signature key'
+            )));
+            return;
+        }
+
+        if ($body["isPaid"]) {
+            $order->add_order_note(__('Payment done. Purchased goods/services can be securely delivered to the customer.', 'sbp_payment_gateway'));
+            $order->payment_complete();
+            $order->save();
+
+            echo(json_encode(array(
+                'result'   => 'success',
+                'redirect' => $order->get_checkout_order_received_url()
+            )));
+                        
+        } else if ($body["isExpired"]) {
+            $order->update_status("cancelled");
+            $order->add_order_note(__('Payment expired.', 'sbp_payment_gateway'));
+            $order->save();
+            
+            echo(json_encode(array(
+                'result'   => 'success',
+                'details' => "Order expired."
+            )));
+        }
+    }
+
+    function check_signature($json_data, $signature, $sbp_payment_id) {
+        $plugin = new WC_Gateway_Swiss_Bitcoin_Pay();
+        $secret_key = $plugin->get_option('sbp_secret_key');
+        if ( !empty($secret_key) ) {
+                return hash_equals(hash_hmac('sha256', $json_data, $secret_key), $signature);
+        }
+        return True;
+    }
+
+    //Register callback
+    add_action("rest_api_init", function () {
+        register_rest_route("sbp_gw/v1", "/payment_complete/(?P<wcOrderId>\d+)", array(
+            "methods"  => WP_REST_Server::EDITABLE,
+            "callback" => "sbp_add_payment_complete_callback",
+            'permission_callback' => '__return_true'
+        ));
+    });
+
 }
+
+add_action( 'woocommerce_blocks_loaded', [ 'WC_Gateway_Swiss_Bitcoin_Pay', 'blocksSupport' ] );
+
+add_action( 'before_woocommerce_init', function() {
+	if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+		\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+		\Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', __FILE__, true );
+	}
+} );
