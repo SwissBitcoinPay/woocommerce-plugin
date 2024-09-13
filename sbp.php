@@ -6,10 +6,12 @@ Plugin URI: https://github.com/SwissBitcoinPay/woocommerce-plugin
 Description: Accept Bitcoin in a few minutes
 Text Domain: sbp_payment_gateway
 Domain Path: /languages
-Version: 0.0.3
+Version: 1.0.0
 Author: Thomas Ballivet
 Author URI: https://github.com/thomask7b
-*/  
+License: MIT
+License URI: https://github.com/SwissBitcoinPay/woocommerce-plugin/blob/main/LICENSE
+*/
 
 add_action('plugins_loaded', 'sbp_gateway_init');
 
@@ -61,8 +63,8 @@ function sbp_gateway_init()
         public function admin_options()
         {
             ?>
-            <h3><?php _e('Swiss Bitcoin Pay', 'woothemes'); ?></h3>
-            <p><?php _e('Accept Bitcoin instantly through Swiss Bitcoin Pay', 'woothemes'); ?></p>
+            <h3><?php esc_html_e('Swiss Bitcoin Pay', 'woothemes'); ?></h3>
+            <p><?php esc_html_e('Accept Bitcoin instantly through Swiss Bitcoin Pay', 'woothemes'); ?></p>
             <table class="form-table">
                 <?php $this->generate_settings_html(); ?>
             </table>
@@ -198,7 +200,7 @@ function sbp_gateway_init()
 
         if (!check_signature($data->get_body(), $signature, $order->get_meta('sbp_payment_id'))) {
             error_log("[Swiss Bitcoin Pay Plugin] Wrong HMAC signature key!");
-            echo(json_encode(array(
+            echo(wp_json_encode(array(
                 'result'   => 'error',
                 'reason'   => 'Wrong signature key'
             )));
@@ -210,7 +212,7 @@ function sbp_gateway_init()
             $order->payment_complete();
             $order->save();
 
-            echo(json_encode(array(
+            echo(wp_json_encode(array(
                 'result'   => 'success',
                 'redirect' => $order->get_checkout_order_received_url()
             )));
@@ -220,7 +222,7 @@ function sbp_gateway_init()
             $order->add_order_note(__('Payment expired.', 'sbp_payment_gateway'));
             $order->save();
             
-            echo(json_encode(array(
+            echo(wp_json_encode(array(
                 'result'   => 'success',
                 'details' => "Order expired."
             )));
