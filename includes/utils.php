@@ -8,7 +8,7 @@ class CurlWrapper {
         $r = wp_remote_request($url, array(
             'method' => $method,
             'headers' => $headers,
-            'body' => $data ? json_encode($data) : ''
+            'body' => $data ? wp_json_encode($data) : ''
         ));
 
         if (is_wp_error($r)) {
